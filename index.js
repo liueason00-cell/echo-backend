@@ -488,6 +488,65 @@ async function callDeepSeekBrain(prompt, res, targetModel) {
   }
   return fullReply;
 }
+// ============================================================================
+// 12. 🔐 中国特供：自定义账号系统 (无需 Firebase Auth 验证)
+// ============================================================================
+
+// 注册接口
+app.post('/api/auth/register', async (req, res) => {
+  const { username, password } = req.body;
+  if (!username || !password) return res.status(400).json({ error: "账号密码不能为空" });
+  if (username.length < 3) return res.status(400).json({ error: "账号至少3个字符" });
+
+  try {
+    const docRef = firestore.collection('custom_accounts').doc(username);
+    const doc = await docRef.get();
+
+    if (doc.exists) {
+      return res.status(400).json({ error: "该账号已被注册，请直接登录" });
+    }
+
+    // 生成一个固定的 UID，绑定在这个账号上
+    const fixedUid = `cn_user_${username}`; 
+
+    await docRef.set({
+      password: password, // MVP阶段明文存储，生产环境建议Hash
+      uid: fixedUid,
+      createdAt: new Date().toISOString()
+    });
+
+    res.json({ success: true, uid: fixedUid, username });
+  } catch (e) {
+    console.error("Register Error:", e);
+    res.status(500).json({ error: "注册服务繁忙" });
+  }
+});
+
+// 登录接口
+app.post('/api/auth/login', async (req, res) => {
+  const { username, password } = req.body;
+  if (!username || !password) return res.status(400).json({ error: "请输入账号密码" });
+
+  try {
+    const docRef = firestore.collection('custom_accounts').doc(username);
+    const doc = await docRef.get();
+
+    if (!doc.exists) {
+      return res.status(404).json({ error: "账号不存在，请先注册" });
+    }
+
+    const data = doc.data();
+    if (data.password !== password) {
+      return res.status(401).json({ error: "密码错误" });
+    }
+
+    res.json({ success: true, uid: data.uid, username });
+  } catch (e) {
+    console.error("Login Error:", e);
+    res.status(500).json({ error: "登录服务繁忙" });
+  }
+});
+
 
 // ============================================================================
 // 11. 🛣️ 路由层 (修复版：优先前端历史)
