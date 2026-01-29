@@ -547,7 +547,31 @@ app.post('/api/auth/login', async (req, res) => {
   }
 });
 
+// 注销/删除账号接口
+app.delete('/api/auth/delete', async (req, res) => {
+  const { uid } = req.body;
+  if (!uid) return res.status(400).json({ error: "User ID required" });
 
+  try {
+    // 1. 如果是自定义账号 (cn_user_开头)
+    if (uid.startsWith('cn_user_')) {
+      const username = uid.replace('cn_user_', '');
+      await firestore.collection('custom_accounts').doc(username).delete();
+    } 
+    // 2. 如果是 Firebase 账号，后端暂时只负责返回成功，
+    // 真正的 Auth 删除由前端 SDK 完成，这里可以扩展删除数据库里的用户数据
+    
+    // 这里我们可以顺便把该用户的云端聊天记录(如果有存的话)也删了
+    // await firestore.collection('chats').doc(uid).delete(); 
+
+    res.json({ success: true, message: "Account deleted" });
+  } catch (e) {
+    console.error("Delete Error:", e);
+    res.status(500).json({ error: "Delete failed" });
+  }
+});
+
+// ... app.listen ...
 // ============================================================================
 // 11. 🛣️ 路由层 (修复版：优先前端历史)
 // ============================================================================
