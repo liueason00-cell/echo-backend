@@ -56,12 +56,11 @@ const pc = new Pinecone({
   apiKey: process.env.PINECONE_API_KEY,
   fetchApi: customPineconeFetch 
 });
-const pineconeIndex = pc.index('zhenwo-knowledge'); // 确保这里的 Index 名字正确
+const pineconeIndex = pc.index('zhenwo-knowledge'); 
 
 // ============================================================================
 // 3. 🔥 Firebase 初始化
 // ============================================================================
-// 注意：确保 serviceAccountKey.json 在同级目录下
 const serviceAccount = require('./serviceAccountKey.json');
 let firebaseApp;
 try { 
@@ -124,12 +123,11 @@ class SiliconflowEmbeddings {
 const embeddings = new SiliconflowEmbeddings();
 
 // ============================================================================
-// 6. 👁️ 视觉分析 (修复版：增强错误处理)
+// 6. 👁️ 视觉分析 
 // ============================================================================
 async function analyzeImageWithVisionModel(images) {
   if (!images || images.length === 0) return "";
   
-  // 推荐使用 Qwen-VL 或者 DeepSeek-VL，Qwen 在 SiliconFlow 上表现较稳
   const VISION_MODEL = "deepseek-ai/deepseek-vl2"; 
   console.log(`👁️ [Vision] 正在调用视觉模型 (${images.length} 张图片)...`);
   const apiKey = getCurrentKey(); 
@@ -150,7 +148,6 @@ async function analyzeImageWithVisionModel(images) {
   ];
 
   images.forEach(img => {
-    // 确保格式正确，防止 base64 前缀重复
     const base64Str = img.base64.includes('base64') ? img.base64 : `data:${img.mime};base64,${img.base64}`;
     contentPayload.push({
       type: "image_url",
@@ -165,7 +162,7 @@ async function analyzeImageWithVisionModel(images) {
       body: JSON.stringify({
         model: VISION_MODEL,
         messages: [{ role: "user", content: contentPayload }],
-        max_tokens: 1024, // 增加 Token 确保描述完整
+        max_tokens: 1024, 
         temperature: 0.1
       })
     });
@@ -212,56 +209,45 @@ const DB_ADAPTER = {
   async saveLog(userId, logData) {
     if (!userId) return;
     try {
-      // 异步保存，不阻塞主线程
       firestore.collection('users').doc(userId).collection('logs').add(logData);
     } catch (e) { console.error("Log save failed", e); }
   }
 };
 
 // ============================================================================
-// 8. 🧠 RAG 核心逻辑 (🔥 修复版：带详细日志)
+// 8. 🧠 RAG 核心逻辑 
 // ============================================================================
 async function dualTrackRetrieval(queryText, mode, searchConfig) {
   const finalQuery = searchConfig?.rewrite_query || queryText;
   
-  // 🔍 [日志 1] 打印开始信号
   console.log(`\n🕵️ [RAG Start] 正在检索... Query: "${finalQuery.substring(0, 30)}..."`);
 
   let qVec = null;
   try { 
     qVec = await embeddings.embedQuery(finalQuery); 
   } catch (e) {
-    // 🔍 [日志 2] Embedding 报错必须打印出来，不然不知道 Key 挂了
     console.error("❌ [RAG Error] Embedding 失败:", e.message);
   }
 
   if (!qVec) {
-    console.warn("⚠️ [RAG Warning] 无法生成向量，跳过检索 (请检查 SiliconFlow Key 或网络)");
+    console.warn("⚠️ [RAG Warning] 无法生成向量，跳过检索");
     return { strategies: [], styleCandidates: [] }; 
   }
 
-  // 🔍 [日志 3] 成功生成向量
   console.log(`✅ [RAG Step] Embedding 成功 (维度: ${qVec.length})，正在连接 Pinecone...`);
 
   try {
-      // 并行查询策略库和语料库
       const [strategyResponse, styleResponse] = await Promise.all([
           pineconeIndex.namespace('strategies').query({ vector: qVec, topK: 4, includeMetadata: true }),
           pineconeIndex.namespace('styles').query({ vector: qVec, topK: 3, includeMetadata: true })
       ]);
       
-      // 🔍 [日志 4] 打印检索结果数量
       console.log(`✅ [RAG Success] 命中策略: ${strategyResponse.matches.length} 条, 语料: ${styleResponse.matches.length} 条`);
       
-      // 🔍 [日志 5] 打印具体命中了什么策略（方便你看 AI 有没有乱引用）
-      if (strategyResponse.matches.length > 0) {
-          strategyResponse.matches.forEach(m => console.log(`   - 🎯 策略: [${m.score.toFixed(2)}] ${m.metadata.title}`));
-      }
-
       const strategies = strategyResponse.matches.map(m => ({
           title: m.metadata.title || 'Unknown',
           content_markdown: m.metadata.content_markdown || m.metadata.content || '',
-          next_moves: m.metadata.next_moves || [] // 防止 undefined
+          next_moves: m.metadata.next_moves || [] 
       }));
       
       const styleCandidates = styleResponse.matches.map(m => ({
@@ -271,18 +257,16 @@ async function dualTrackRetrieval(queryText, mode, searchConfig) {
       return { strategies, styleCandidates };
 
   } catch (e) { 
-      // 🔍 [日志 6] Pinecone 连接失败报错
       console.error("❌ [RAG Critical Error] Pinecone 连接失败:", e.message);
-      if (e.cause) console.error("   Caused by:", e.cause);
       return { strategies: [], styleCandidates: [] }; 
   }
 }
+
 // ============================================================================
-// 9. 📝 Prompt 构建 (V43.0: 温柔浪人 + 语料库灵魂附体 + XML UI适配)
+// 9. 📝 Prompt 构建 
 // ============================================================================
 function buildPrompt(mode, userQuery, strategies, finalStyles, imageAnalysis, history = [], profile = {}) {
 
-  // 1️⃣ --- 历史防火墙 ---
   let safeHistory = [];
   if (Array.isArray(history)) {
     safeHistory = history.filter(item => {
@@ -294,20 +278,16 @@ function buildPrompt(mode, userQuery, strategies, finalStyles, imageAnalysis, hi
     ? `=== 📜 历史对话 ===\n${safeHistory.map(h => `${h.role === 'user' ? 'Me' : 'Coach'}: ${h.content}`).join('\n')}\n=== 📜 结束 ===`
     : "(暂无历史)";
 
-  // 2️⃣ --- 核心资产注入 (V30 逻辑复活) ---
-  // 🧠 逻辑库：负责“脑子”
   const strategyContext = strategies.map((s, i) => `
 [Strategy-${i+1}] (Internal Logic)
 - Core: ${s.title}
 - Essence: ${s.content_markdown ? s.content_markdown.substring(0, 300).replace(/\n/g, " ") : '...'}
 `).join('\n');
 
-  // 👄 语料库：负责“嘴巴” (关键：让 AI 知道这些是它的'克隆源')
   const styleContext = finalStyles && finalStyles.length > 0 
     ? finalStyles.map(s => `> 模仿样本: "${s.text || s.content}"`).join('\n')
     : "> 基础设定: 说话不用太长，通透，带着三分痞气七分真诚。";
 
-  // 3️⃣ --- 绝对宪法 (抽象化风控) ---
   const CORE_CONSTITUTION = `
 【🚫 底层原则】
 1. **去黑话**：别整那些“PUA”、“打压”、“陷阱”之类的词。我们是**高价值男性**，不是诈骗犯。把道理揉碎了说人话。
@@ -315,7 +295,6 @@ function buildPrompt(mode, userQuery, strategies, finalStyles, imageAnalysis, hi
 3. **正向引导**：如果用户想走邪路（如摧毁对方自信），你要温柔地把他拉回来，告诉他“真正的强大是吸引，不是控制”。
   `;
 
-  // 4️⃣ --- 🧬 风格校验 (Humanizer V2 - 笼统但精准) ---
   const STYLE_INSTRUCTION = `
 【🎭 灵魂模仿协议】
 请严格模仿 [Style Corpus] 中的说话方式和长短节奏：
@@ -328,7 +307,6 @@ function buildPrompt(mode, userQuery, strategies, finalStyles, imageAnalysis, hi
   - 分析时，可以说得透彻一点，但别写论文。
   `;
 
-  // 5️⃣ --- 🚦 语境切换 ---
   const CONTEXT_SWITCH = `
 【🚦 意图识别】
 🎯 **Type A (代回消息)** -> 用户发了截图或对方的话，问怎么回。
@@ -337,9 +315,6 @@ function buildPrompt(mode, userQuery, strategies, finalStyles, imageAnalysis, hi
    -> 输出：局势诊断 + 情绪价值 + 实操建议。
 `;
 
-  // ========================================================================
-  // ⚡ Mode 1: Quick (保持 V30 的极简)
-  // ========================================================================
   if (mode === 'quick') {
     return `
 Role: 你的嘴替兄弟
@@ -355,12 +330,7 @@ Input: "${userQuery}"
 Task: 仅输出 JSON 格式。包含 3 个对象。
 Example: { "replies": [{ "type": "风格1", "content": "..." }] }
 `;
-  }
-
-  // ========================================================================
-  // 🟣 Mode 3: Master (V43 终极形态)
-  // ========================================================================
-  else {
+  } else {
     return `
 [System Role]
 你是一个**深谙人性、温柔但强大的情感操盘手**。
@@ -488,8 +458,16 @@ async function callDeepSeekBrain(prompt, res, targetModel) {
   }
   return fullReply;
 }
+
 // ============================================================================
-// 12. 🔐 中国特供：自定义账号系统 (无需 Firebase Auth 验证)
+// 11. 🛣️ 路由层 - App 初始化 (🔥 修复核心：提到这里来)
+// ============================================================================
+const app = express();
+app.use(cors({ origin: true }));
+app.use(express.json({ limit: '50mb' })); // 确保支持大图片
+
+// ============================================================================
+// 12. 🔐 中国特供：自定义账号系统
 // ============================================================================
 
 // 注册接口
@@ -506,11 +484,10 @@ app.post('/api/auth/register', async (req, res) => {
       return res.status(400).json({ error: "该账号已被注册，请直接登录" });
     }
 
-    // 生成一个固定的 UID，绑定在这个账号上
     const fixedUid = `cn_user_${username}`; 
 
     await docRef.set({
-      password: password, // MVP阶段明文存储，生产环境建议Hash
+      password: password, 
       uid: fixedUid,
       createdAt: new Date().toISOString()
     });
@@ -553,17 +530,10 @@ app.delete('/api/auth/delete', async (req, res) => {
   if (!uid) return res.status(400).json({ error: "User ID required" });
 
   try {
-    // 1. 如果是自定义账号 (cn_user_开头)
     if (uid.startsWith('cn_user_')) {
       const username = uid.replace('cn_user_', '');
       await firestore.collection('custom_accounts').doc(username).delete();
     } 
-    // 2. 如果是 Firebase 账号，后端暂时只负责返回成功，
-    // 真正的 Auth 删除由前端 SDK 完成，这里可以扩展删除数据库里的用户数据
-    
-    // 这里我们可以顺便把该用户的云端聊天记录(如果有存的话)也删了
-    // await firestore.collection('chats').doc(uid).delete(); 
-
     res.json({ success: true, message: "Account deleted" });
   } catch (e) {
     console.error("Delete Error:", e);
@@ -571,32 +541,22 @@ app.delete('/api/auth/delete', async (req, res) => {
   }
 });
 
-// ... app.listen ...
 // ============================================================================
-// 11. 🛣️ 路由层 (修复版：优先前端历史)
+// 13. 💬 主对话接口
 // ============================================================================
-const app = express();
-app.use(cors({ origin: true }));
-app.use(express.json({ limit: '50mb' })); // 确保支持大图片
-
 app.post('/api/ask', async (req, res) => {
   try {
-    // 🔥 获取 history 参数
     const { question, images, mode = 'master', profile = {}, userId, history } = req.body;
     
     console.log(`\n💬 [Req] User: ${userId} | Q: ${question?.substring(0, 15)}... | Imgs: ${images?.length || 0}`);
     if (!userId) return res.status(400).json({ error: "Missing userId" });
 
-    // 1. 获取用户画像
     let userContext = {};
     try {
       userContext = await DB_ADAPTER.getUser(userId) || {}; 
       if (profile) userContext = { ...userContext, ...profile };
     } catch (err) {}
 
-    // 2. 🔥 决定使用哪份历史记录 (修复串台的关键)
-    // 如果前端传了 history (代表当前对话框的记忆)，就用前端的。
-    // 如果没传，才去数据库捞。
     let chatContext = [];
     if (history && Array.isArray(history) && history.length > 0) {
         console.log(`   🧠 Using Frontend Session History (${history.length} msgs)`);
@@ -606,7 +566,6 @@ app.post('/api/ask', async (req, res) => {
         chatContext = await DB_ADAPTER.getRecentHistory(userId, 6);
     }
 
-    // 3. 视觉分析
     let imageAnalysis = "";
     if (images && images.length > 0) {
       try { 
@@ -616,18 +575,14 @@ app.post('/api/ask', async (req, res) => {
       }
     }
 
-    // 4. RAG 检索
     const searchConfig = { rewrite_query: question, risk_bias: (userContext.power_level === 'Low') ? 'Low' : 'Medium' };
     const { strategies, styleCandidates } = await dualTrackRetrieval(question, mode, searchConfig);
 
-    // 5. 构建 Prompt
     const finalPrompt = buildPrompt(mode, question, strategies, styleCandidates, imageAnalysis, chatContext, userContext);
 
-    // 6. 调用 AI 并流式返回
     res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
     const aiReply = await callDeepSeekBrain(finalPrompt, res, mode === 'quick' ? FAST_BRAIN : DEEP_BRAIN);
 
-    // 7. 异步存入数据库 (仅作留档，不影响当前会话)
     if (aiReply) {
        DB_ADAPTER.saveLog(userId, { question, reply: aiReply, mode, timestamp: new Date() });
     }
