@@ -1,5 +1,5 @@
 // ============================================================================
-// 🔥🔥🔥 Project Zhenwo Backend V12: 修复版 (解决串台 + 视觉唤醒) 🔥🔥🔥
+// 🔥🔥🔥 Project Zhenwo Backend V13: 商业化升级版 (Gemini 2.5 Pro + 收款闭环) 🔥🔥🔥
 // ============================================================================
 
 const express = require('express');
@@ -10,6 +10,10 @@ const { Pinecone } = require('@pinecone-database/pinecone');
 const { initializeApp, cert } = require('firebase-admin/app');
 const { getFirestore } = require('firebase-admin/firestore');
 const admin = require('firebase-admin');
+
+// ✅ [新增] 引入 Google Gemini SDK
+const { GoogleGenerativeAI } = require("@google/generative-ai");
+
 require('dotenv').config();
 
 // ============================================================================
@@ -61,7 +65,6 @@ const pineconeIndex = pc.index('zhenwo-knowledge');
 // ============================================================================
 // 3. 🔥 Firebase 初始化
 // ============================================================================
-// ✅ 智能加载密钥：优先找 Render 的保险柜，找不到再找本地
 const fs = require('fs');
 let serviceAccount;
 try {
@@ -84,7 +87,7 @@ try {
 const firestore = getFirestore(firebaseApp);
 
 // ============================================================================
-// 4. 🔑 API Key 管理
+// 4. 🔑 API Key 管理 (原有 SiliconFlow)
 // ============================================================================
 const rawKeys = process.env.SILICONFLOW_API_KEYS || process.env.SILICONFLOW_API_KEY || "";
 const apiKeys = rawKeys.split(/,|\n/).map(k => k.trim()).filter(k => k && k.startsWith('sk-'));
@@ -97,7 +100,13 @@ function rotateKey() {
 }
 
 const FAST_BRAIN = "deepseek-ai/DeepSeek-V3"; 
-const DEEP_BRAIN = "deepseek-ai/DeepSeek-R1";      
+const DEEP_BRAIN = "deepseek-ai/DeepSeek-R1"; // 旧代码保留不动
+
+// ============================================================================
+// 4.5 🧠 Gemini 初始化 (✅ 新增)
+// ============================================================================
+// 请确保在环境变量中配置了 GEMINI_API_KEY
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
 // ============================================================================
 // 5. 🧠 Embedding 工具类
@@ -378,7 +387,7 @@ Input: "${userQuery}"
 
 [任务要求]
 请输出 JSON，包含 3 个对象 (replies)。
-⚠️ **关键风控**：如果检测到【脆弱区 (Vulnerable)】，Option B 必须改为"温暖行动"，严禁骚话。
+⚠️ **关键风控**：如果检测到【脆弱区 (Vulnerable)】，Option B必须改为"温暖行动"，严禁骚话。
 
 Format: { 
   "detected_mode": "例如: 🧪 测试区 (Shit Test)",
@@ -438,7 +447,7 @@ User Query Data:
 2. **Empathize**: 用户心情如何？
 3. **Analyze**: Type A or Type B?
 4. **Anti-AI**: 读一遍草稿，如果像客服，重写成人话。
-ƒ
+
 [[ 📝 强制输出规范 (XML For UI) ]]
 
 🛑 **如果是 Type B (闲聊/非咨询)**：
@@ -480,7 +489,7 @@ Please strictly follow this XML format (in the detected language):
 }
 
 // ========================================================================
-// 10. 🌊 DeepSeek 流式调用
+// 10. 🌊 DeepSeek 流式调用 (原封不动保留)
 // ============================================================================
 async function callDeepSeekBrain(prompt, res, targetModel) {
   let fullReply = ""; 
@@ -532,7 +541,36 @@ async function callDeepSeekBrain(prompt, res, targetModel) {
   return fullReply;
 }
 
-// ✅ [插入点] 懒人场景补全助手
+// ============================================================================
+// 10.5 🌊 Gemini 2.5 Pro 流式调用 (✅ 新增：专供 Master 模式)
+// ============================================================================
+async function callGeminiBrain(prompt, res) {
+  try {
+    const model = genAI.getGenerativeModel({ 
+        model: "gemini-2.5-pro",
+        generationConfig: { temperature: 0.7, maxOutputTokens: 4096 }
+    });
+
+    const result = await model.generateContentStream(prompt);
+    let fullReply = "";
+
+    for await (const chunk of result.stream) {
+      const chunkText = chunk.text();
+      if (chunkText) {
+        // 无缝适配你原有的 SSE 协议，前端不需要做任何改动
+        res.write(`data: ${JSON.stringify({ type: 'analysis', content: chunkText })}\n\n`);
+        fullReply += chunkText;
+      }
+    }
+    return fullReply;
+  } catch (e) {
+    console.error("❌ [Gemini Error]", e.message);
+    res.write(`data: ${JSON.stringify({ type: 'analysis', content: "⚠️ Gemini 链路波动，请稍后再试。" })}\n\n`);
+    return null;
+  }
+}
+
+// ✅ [插入点] 懒人场景补全助手 (保留)
 function buildLazyClarifierPrompt(userQuery) {
   return `
 Role: 场景补全助手
@@ -581,10 +619,9 @@ app.use(cors({ origin: true }));
 app.use(express.json({ limit: '50mb' })); 
 
 // ============================================================================
-// 12. 🔐 中国特供：自定义账号系统
+// 12. 🔐 中国特供：自定义账号系统 (保留)
 // ============================================================================
 
-// 注册接口 (完整保留原有逻辑)
 app.post('/api/auth/register', async (req, res) => {
   const { username, password } = req.body;
   if (!username || !password) return res.status(400).json({ error: "账号密码不能为空" });
@@ -613,7 +650,6 @@ app.post('/api/auth/register', async (req, res) => {
   }
 });
 
-// 登录接口 (完整保留原有逻辑)
 app.post('/api/auth/login', async (req, res) => {
   const { username, password } = req.body;
   if (!username || !password) return res.status(400).json({ error: "请输入账号密码" });
@@ -638,7 +674,6 @@ app.post('/api/auth/login', async (req, res) => {
   }
 });
 
-// 注销/删除账号接口 (完整保留原有逻辑)
 app.delete('/api/auth/delete', async (req, res) => {
   const { uid } = req.body;
   if (!uid) return res.status(400).json({ error: "User ID required" });
@@ -656,6 +691,34 @@ app.delete('/api/auth/delete', async (req, res) => {
 });
 
 // ============================================================================
+// 12.5 💰 付款通知路由 (✅ 新增：为了极简付费墙)
+// ============================================================================
+app.post('/api/payment-notify', async (req, res) => {
+  const { userId, username } = req.body;
+  if (!userId) return res.status(400).json({ error: "Missing userId" });
+
+  try {
+    // 写入 Firebase 等待你的人工核实
+    await firestore.collection('pending_payments').add({
+      userId,
+      username: username || 'Unknown',
+      status: 'pending',
+      amount: 49.9,
+      timestamp: admin.firestore.FieldValue.serverTimestamp()
+    });
+
+    // 预留位置：你可以用 Server酱 或 Bark 在手机上接收消息推送
+    // 比如：
+    // const PUSH_KEY = "你的_SERVER酱_KEY"; 
+    // fetch(`https://sctapi.ftqq.com/${PUSH_KEY}.send?title=EchoNewOrder&desp=${username}`);
+
+    res.json({ success: true, message: "通知已发出" });
+  } catch (e) {
+    res.status(500).json({ error: "通知发送失败" });
+  }
+});
+
+// ============================================================================
 // 13. 💬 主对话接口
 // ============================================================================
 app.post('/api/ask', async (req, res) => {
@@ -665,7 +728,7 @@ app.post('/api/ask', async (req, res) => {
     console.log(`\n💬 [Req] User: ${userId} | Q: ${question?.substring(0, 15)}... | Imgs: ${images?.length || 0}`);
     if (!userId) return res.status(400).json({ error: "Missing userId" });
 
-    // ✅ [插入点] 拦截门逻辑
+    // ✅ [拦截门逻辑保留]
     const isShortText = question && question.trim().length < 8; 
     const isVague = /怎么回|怎么办|救命|她生气了|不理我|帮我/.test(question || ""); 
     const hasImage = images && images.length > 0;
@@ -709,7 +772,23 @@ app.post('/api/ask', async (req, res) => {
     const finalPrompt = buildPrompt(mode, question, strategies, styleCandidates, imageAnalysis, chatContext, userContext);
 
     res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
-    const aiReply = await callDeepSeekBrain(finalPrompt, res, mode === 'quick' ? FAST_BRAIN : DEEP_BRAIN);
+    
+    // ✅ [新增] 后端二次安全校验：防止绕过前端强行调用 Master 接口
+    if (mode === 'master' && userContext.power_level !== 'Pro') {
+        res.write(`data: ${JSON.stringify({ type: 'analysis', content: "🔒 该账号尚未解锁 Pro 权限，请在前端完成升级。" })}\n\n`);
+        res.write(`data: ${JSON.stringify({ type: 'done' })}\n\n`);
+        return res.end();
+    }
+
+    // ✅ [修改] 路由分发大换血：Quick 走 DeepSeek-V3，Master 走 Gemini 2.5 Pro
+    let aiReply;
+    if (mode === 'quick') {
+        // Quick 模式：调用原有的 DeepSeek 方法
+        aiReply = await callDeepSeekBrain(finalPrompt, res, FAST_BRAIN);
+    } else {
+        // Master 模式：完全调用新的 Gemini 方法
+        aiReply = await callGeminiBrain(finalPrompt, res);
+    }
 
     if (aiReply) {
        DB_ADAPTER.saveLog(userId, { question, reply: aiReply, mode, timestamp: new Date() });
@@ -725,4 +804,4 @@ app.post('/api/ask', async (req, res) => {
 });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`🚀 Zhenwo Backend V12 (Vision+Memory Fix) Running on Port: ${PORT}`));
+app.listen(PORT, () => console.log(`🚀 Zhenwo Backend V13 (Gemini 2.5 Pro Ready) Running on Port: ${PORT}`));
