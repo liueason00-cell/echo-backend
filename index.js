@@ -452,7 +452,12 @@ User Query Data:
 
 ✅ **如果是 Type A (需要策略/回消息)**：
 Please strictly follow this XML format (in the detected language):
+⚠️ CRITICAL FORMATTING RULES (Must Follow):
+1. NO NESTING: You MUST close each block (e.g., :::END_ANALYSIS:::) before opening the next one! Never put one block inside another.
+2. EXACT TAGS ONLY: Do not write any extra text or titles on the same line as the ":::" tags. For example, use exactly ":::ACTION:::", NEVER ":::ACTION::: 战术建议".
+3. NO MARKDOWN: Do not use triple backticks and do not wrap the output in any code blocks. Just output the raw tags directly.
 
+:::ANALYSIS:::
 :::ANALYSIS:::
 (局势诊断 / Diagnosis)
 :::END_ANALYSIS:::
