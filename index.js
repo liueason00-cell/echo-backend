@@ -29,7 +29,7 @@ const proxyAgent = new HttpsProxyAgent(PROXY_URL, {
   timeout: 60000             
 });
 
-global.fetch = (url, init) => {
+const myFetch = (url, init) => {
   if (USE_PROXY && !url.includes('localhost') && !url.includes('127.0.0.1')) {
     return nodeFetch(url, { ...init, agent: proxyAgent, timeout: 60000 });
   }
@@ -121,7 +121,7 @@ class SiliconflowEmbeddings {
     for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
       try {
         const apiKey = getCurrentKey();
-        const response = await fetch(this.baseURL, { 
+        const response = await myFetch(this.baseURL, { 
           method: 'POST',
           headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
           body: JSON.stringify({ model: this.modelName, input: [text.replace(/\n/g, " ")] })
@@ -177,7 +177,7 @@ async function analyzeImageWithVisionModel(images) {
   });
 
   try {
-    const response = await fetch('https://api.siliconflow.cn/v1/chat/completions', {
+    const response = await myFetch('https://api.siliconflow.cn/v1/chat/completions', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
       body: JSON.stringify({
@@ -494,7 +494,7 @@ async function callDeepSeekBrain(prompt, res, targetModel) {
   
   while (retries < 2) {
     try {
-      const response = await fetch('https://api.siliconflow.cn/v1/chat/completions', {
+      const response = await myFetch('https://api.siliconflow.cn/v1/chat/completions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getCurrentKey()}` },
         body: JSON.stringify({ 
