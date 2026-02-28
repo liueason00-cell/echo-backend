@@ -456,6 +456,11 @@ Please strictly follow this XML format (in the detected language):
 1. NO NESTING: You MUST close each block (e.g., :::END_ANALYSIS:::) before opening the next one! Never put one block inside another.
 2. EXACT TAGS ONLY: Do not write any extra text or titles on the same line as the ":::" tags. For example, use exactly ":::ACTION:::", NEVER ":::ACTION::: 战术建议".
 3. NO MARKDOWN: Do not use triple backticks and do not wrap the output in any code blocks. Just output the raw tags directly.
+4. FORMATTING AESTHETICS (排版美学 - 极度重要):
+   - 呼吸感：段落必须短小（最多3句话），段落之间**必须留空行**。
+   - 划重点：必须使用 **加粗** 来突出核心战术、扎心的金句、或者关键动作！
+   - 结构化：大量使用分点（- ）进行逻辑拆解，拒绝密密麻麻的文字块。
+   - 极简精炼：字字珠玑，砍掉所有多余的废话和客套话。
 
 :::ANALYSIS:::
 :::ANALYSIS:::
