@@ -881,7 +881,7 @@ app.post('/api/ask', async (req, res) => {
         }
     } else if (mode === 'master') {
         // 第一梯队：每日免费额度 (所有人每天1次)
-        if (masterUsed < 1) {
+        if (masterUsed < 5) {
             billingMode = 'daily_free';
         } 
         // 第二梯队：包月 Pro 会员 (每天50次)
