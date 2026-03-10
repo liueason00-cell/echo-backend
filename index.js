@@ -872,8 +872,8 @@ app.post('/api/ask', async (req, res) => {
     let billingMode = null; // 'daily_free' | 'pro_daily' | 'purchased' | 'quick_daily'
 
     if (mode === 'quick') {
-        if (quickUsed >= 20) {
-            res.write(`data: ${JSON.stringify({ type: 'analysis', content: "⚠️ 今日 Quick 免费额度 (20/20) 已耗尽，请升级 Pro 或明早再来。" })}\n\n`);
+        if (quickUsed >= 5) {
+            res.write(`data: ${JSON.stringify({ type: 'analysis', content: "⚠️ 今日 Quick 免费额度 (5/5) 已耗尽，请升级 Pro 或明早再来。" })}\n\n`);
             res.write(`data: ${JSON.stringify({ type: 'done' })}\n\n`);
             return res.end();
         } else {
